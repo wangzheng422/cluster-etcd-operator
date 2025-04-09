@@ -102,6 +102,77 @@ graph TD
 
 ## 5. 代码片段
 
+
+**pkg/operator/etcdcertsigner/etcdcertsignercontroller.go** `EtcdCertSignerController` 定期（默认每分钟）执行同步逻辑。
+
+```go
+// pkg/operator/etcdcertsigner/etcdcertsignercontroller.go
+func NewEtcdCertSignerController(
+    // ... 参数省略 ...
+) factory.Controller {
+    // ... 初始化代码省略 ...
+    
+    // 创建一个健康检查包装器，包装实际的同步函数
+    syncer := health.NewDefaultCheckingSyncWrapper(c.sync)
+    livenessChecker.Add("EtcdCertSignerController", syncer)
+
+    // 关键部分：设置控制器每分钟执行一次同步
+    return factory.New().ResyncEvery(time.Minute).WithInformers(
+        masterNodeInformer,
+        kubeInformers.InformersFor(operatorclient.GlobalUserSpecifiedConfigNamespace).Core().V1().Secrets().Informer(),
+        cmInformer.Informer(),
+        secretInformer.Informer(),
+        operatorClient.Informer(),
+    ).WithSync(syncer.Sync).ToController("EtcdCertSignerController", c.eventRecorder)
+}
+
+// 每次同步时执行的主要逻辑
+func (c *EtcdCertSignerController) sync(ctx context.Context, syncCtx factory.SyncContext) error {
+    // 首先检查集群是否有足够的 Quorum 来安全地进行更新
+    safe, err := c.quorumChecker.IsSafeToUpdateRevision()
+    if err != nil {
+        return fmt.Errorf("EtcdCertSignerController can't evaluate whether quorum is safe: %w", err)
+    }
+
+    if !safe {
+        return fmt.Errorf("skipping EtcdCertSignerController reconciliation due to insufficient quorum")
+    }
+
+    // 执行所有证书的同步逻辑
+    if err := c.syncAllMasterCertificates(ctx, syncCtx.Recorder()); err != nil {
+        // 如果同步失败，设置 Degraded 状态条件
+        _, _, updateErr := v1helpers.UpdateStatus(ctx, c.operatorClient, v1helpers.UpdateConditionFn(operatorv1.OperatorCondition{
+            Type:    "EtcdCertSignerControllerDegraded",
+            Status:  operatorv1.ConditionTrue,
+            Reason:  "Error",
+            Message: err.Error(),
+        }))
+        if updateErr != nil {
+            syncCtx.Recorder().Warning("EtcdCertSignerControllerUpdatingStatus", updateErr.Error())
+        }
+        return err
+    }
+
+    // 同步成功，清除 Degraded 状态
+    _, _, updateErr := v1helpers.UpdateStatus(ctx, c.operatorClient,
+        v1helpers.UpdateConditionFn(operatorv1.OperatorCondition{
+            Type:   "EtcdCertSignerControllerDegraded",
+            Status: operatorv1.ConditionFalse,
+            Reason: "AsExpected",
+        }))
+    return updateErr
+}
+```
+
+这段代码展示了 `EtcdCertSignerController` 的定时检查机制：
+
+1. 在控制器初始化时，通过 `ResyncEvery(time.Minute)` 设置每分钟执行一次同步操作。
+2. 每次同步时，首先通过 `IsSafeToUpdateRevision()` 检查 Etcd 集群是否有足够的 Quorum 来安全地进行更新。
+3. 如果 Quorum 检查通过，则调用 `syncAllMasterCertificates()` 执行实际的证书管理逻辑。
+4. 根据同步结果更新控制器的状态条件 `EtcdCertSignerControllerDegraded`，以反映控制器的健康状态。
+
+这种定时检查机制确保了证书管理逻辑会定期执行，及时发现并处理需要轮替的证书，同时通过 Quorum 检查避免在集群不健康时进行可能有风险的操作。
+
 **pkg/operator/starter.go:** 定义了哪些 Secrets/ConfigMaps 包含证书，以及哪些会触发 Revision。
 
 ```go
@@ -245,11 +316,11 @@ func (c *EtcdCertSignerController) sync(ctx context.Context, syncCtx factory.Syn
 *   **Operator Status Conditions:**
     *   检查 `clusteroperator/etcd` 的状态。
     *   关注 `EtcdCertSignerControllerDegraded` 条件。如果为 `True`，表示证书签名控制器遇到错误（如 Quorum 不足、API 访问失败等），轮替可能受阻。Message 字段会提供错误信息。
-```bash
-oc get clusteroperator/etcd
-# NAME   VERSION   AVAILABLE   PROGRESSING   DEGRADED   SINCE   MESSAGE
-# etcd   4.16.34   True        False         False      171d
-```
+		```bash
+		oc get clusteroperator/etcd
+		# NAME   VERSION   AVAILABLE   PROGRESSING   DEGRADED   SINCE   MESSAGE
+		# etcd   4.16.34   True        False         False      171d
+		```
 *   **Kubernetes Events:**
     *   监视 `openshift-etcd` 和 `openshift-etcd-operator` 命名空间中的事件。
     *   `EtcdCertSignerController` 会记录与证书操作相关的事件，特别是错误和警告。`library-go/certrotation` 可能会生成如 `SignerRotation`, `TargetRotation`, `CABundleUpdate` 等事件（具体事件名称需确认）。

@@ -368,6 +368,36 @@ func (c *EtcdCertSignerController) sync(ctx context.Context, syncCtx factory.Syn
 *   **手动干预:**
     *   证书轮替是**全自动**的，通常不需要手动干预。
     *   **强制轮替:** `library-go/certrotation` 通常可以通过删除 Secret 中的特定注解来强制触发下一次同步时的轮替，但这属于高级操作，应谨慎使用，并首先尝试解决导致自动轮替失败的根本原因。不建议常规操作中手动触发。
+        * **强制轮替的具体操作：** 根据源代码分析，以下是强制触发证书轮替的具体步骤：
+            1. 需要删除的关键注解有：
+               * `auth.openshift.io/certificate-not-before` - 证书的生效时间
+               * `auth.openshift.io/certificate-not-after` - 证书的过期时间
+            2. 操作示例（以 etcd-signer 为例）：
+               ```bash
+               # 查看证书 Secret 的当前注解
+               oc get secret etcd-signer -n openshift-etcd -o yaml
+               
+               # 编辑 Secret 删除注解
+               oc edit secret etcd-signer -n openshift-etcd
+               # 在编辑器中删除 auth.openshift.io/certificate-not-before 或 auth.openshift.io/certificate-not-after 注解
+               ```
+            3. 删除这些注解后，在下一次同步循环中（通常每分钟一次），`EtcdCertSignerController` 会检测到缺少这些注解，并认为需要生成新的证书。
+            4. 源代码中的相关逻辑（来自 `library-go/pkg/operator/certrotation/signer.go`）：
+               ```go
+               func getValidityFromAnnotations(annotations map[string]string) (notBefore time.Time, notAfter time.Time, reason string) {
+                   notAfterString := annotations[CertificateNotAfterAnnotation]
+                   if len(notAfterString) == 0 {
+                       return notBefore, notAfter, "missing notAfter"
+                   }
+                   // ...
+                   notBeforeString := annotations[CertificateNotBeforeAnnotation]
+                   if len(notAfterString) == 0 {
+                       return notBefore, notAfter, "missing notBefore"
+                   }
+                   // ...
+               }
+               ```
+               当这些注解缺失时，控制器会记录原因为 "missing notAfter" 或 "missing notBefore"，并触发证书轮替。
     *   如果 Operator 长时间故障导致证书过期，可能需要更复杂的手动恢复流程（可能涉及手动生成证书、更新 Secret、手动触发 Pod 重启等），应参考 OpenShift 官方文档或寻求支持。
 *   **认知:**
     *   理解证书轮替依赖于健康的 Etcd 集群（Quorum）。

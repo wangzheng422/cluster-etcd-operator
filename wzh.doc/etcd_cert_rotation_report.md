@@ -46,7 +46,7 @@ graph TD
         B -- Quorum 正常 --> C[处理 Signer CA]
         C --> D[处理 Metrics Signer CA]
         D --> E[处理 Client 证书]
-        E --> G[为每个 Master 节点处理 Peer/Serving/Metrics 证书]
+        E --> G[为每个 Control Plane 节点处理 Peer/Serving/Metrics 证书]
         G --> H[聚合所有证书到 etcd-all-certs Secret]
         H --> I{再次检查 Quorum}
         I -- Quorum 不足 --> F
@@ -98,7 +98,7 @@ graph TD
 5.  **聚合与部署:**
     *   所有节点的目标证书（Peer, Serving, Metrics Serving）被收集并合并到 `etcd-all-certs` Secret 的 `data` 字段中。
     *   `StaticPodController` 监视 `etcd-all-certs`。当该 Secret 更新时（无论是 Signer 轮替间接导致目标证书更新，还是目标证书自身轮替），`StaticPodController` 会检测到变化。
-    *   检测到变化后，`StaticPodController` 会创建 Etcd Pod 的新 Revision，并触发滚动更新，将包含新证书引用的 Pod 部署到所有 Master 节点。
+    *   检测到变化后，`StaticPodController` 会创建 Etcd Pod 的新 Revision，并触发滚动更新，将包含新证书引用的 Pod 部署到所有 Control Plane 节点。
 
 ## 5. 代码片段
 
@@ -255,7 +255,7 @@ func (c *EtcdCertSignerController) syncAllMasterCertificates(ctx context.Context
 	// ... error handling ...
 
 	// --- Per-Node Cert Handling ---
-	nodeCfgs, err := c.createNodeCertConfigs() // Get configs for all master nodes
+	nodeCfgs, err := c.createNodeCertConfigs() // Get configs for all control plane nodes
 	// ... error handling ...
 
 	allCerts := map[string][]byte{}

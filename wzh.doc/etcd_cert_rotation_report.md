@@ -245,6 +245,11 @@ func (c *EtcdCertSignerController) sync(ctx context.Context, syncCtx factory.Syn
 *   **Operator Status Conditions:**
     *   检查 `clusteroperator/etcd` 的状态。
     *   关注 `EtcdCertSignerControllerDegraded` 条件。如果为 `True`，表示证书签名控制器遇到错误（如 Quorum 不足、API 访问失败等），轮替可能受阻。Message 字段会提供错误信息。
+```bash
+oc get clusteroperator/etcd
+# NAME   VERSION   AVAILABLE   PROGRESSING   DEGRADED   SINCE   MESSAGE
+# etcd   4.16.34   True        False         False      171d
+```
 *   **Kubernetes Events:**
     *   监视 `openshift-etcd` 和 `openshift-etcd-operator` 命名空间中的事件。
     *   `EtcdCertSignerController` 会记录与证书操作相关的事件，特别是错误和警告。`library-go/certrotation` 可能会生成如 `SignerRotation`, `TargetRotation`, `CABundleUpdate` 等事件（具体事件名称需确认）。

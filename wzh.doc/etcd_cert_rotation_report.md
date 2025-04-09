@@ -333,9 +333,16 @@ func (c *EtcdCertSignerController) sync(ctx context.Context, syncCtx factory.Syn
         *   `NodeCurrentRevisionChanged`: 当节点当前版本变更时触发。
         *   `InstallerPodFailed`: 当安装器 Pod 失败时触发。
 *   **Operator Logs:**
-    *   查看 `openshift-etcd-operator` 命名空间中 `etcd-operator-*` Pod 的日志。
+    *   查看 `openshift-etcd-operator` 命名空间中 `cluster-etcd-operator-*` Pod 的日志。
     *   关注 `EtcdCertSignerController` 的日志输出，可以看到同步循环的执行情况、错误信息、Quorum 检查结果等。
-    *   搜索关键词如 `certrotation`, `EnsureSigningCertKeyPair`, `EnsureTargetCertKeyPair`, `ApplySecret`, `etcd-all-certs`, `quorum` 等。
+    *   搜索关键词如：
+        *   `skipping EtcdCertSignerController reconciliation due to insufficient quorum`（Quorum 不足时）
+        *   `error on ensuring etcd-signer cert`（签名 CA 证书操作错误）
+        *   `error on ensuring etcd client cert`（客户端证书操作错误）
+        *   `error on peer cert sync for node`（节点 Peer 证书同步错误）
+        *   `error on serving cert sync for node`（节点 Serving 证书同步错误）
+        *   `error on serving metrics cert sync for node`（节点 Metrics 证书同步错误）
+        *   `Updated ca-bundle.crt configmap`（CA Bundle 更新）
 *   **Secret/ConfigMap Annotations:**
     *   `library-go/certrotation` 会在管理的 Secret 和 ConfigMap 上添加注解，记录证书的过期时间、上次轮替时间等信息。检查 `etcd-signer`, `etcd-metric-signer`, `etcd-ca-bundle`, `etcd-metric-ca-bundle` 以及 `etcd-all-certs` 中各个证书对应的 Secret（如 `etcd-peer-*`, `etcd-serving-*`）的注解可以了解轮替状态。
 

@@ -323,8 +323,15 @@ func (c *EtcdCertSignerController) sync(ctx context.Context, syncCtx factory.Syn
 		```
 *   **Kubernetes Events:**
     *   监视 `openshift-etcd` 和 `openshift-etcd-operator` 命名空间中的事件。
-    *   `EtcdCertSignerController` 会记录与证书操作相关的事件，特别是错误和警告。`library-go/certrotation` 可能会生成如 `SignerRotation`, `TargetRotation`, `CABundleUpdate` 等事件（具体事件名称需确认）。
-    *   `StaticPodController` 会记录与 Revision 创建和 Pod 滚动更新相关的事件。
+    *   `EtcdCertSignerController` 会记录与证书操作相关的事件，特别是错误和警告。
+    *   `library-go/certrotation` 会生成以下具体事件：
+        *   `SignerUpdateRequired`: 当签名 CA 证书需要轮替时触发。
+        *   `TargetUpdateRequired`: 当目标证书（如 peer、serving、client 证书）需要轮替时触发。
+        *   `CABundleUpdateRequired`: 当 CA Bundle 需要更新时触发。
+    *   `InstallerController` 会记录与 Revision 创建和 Pod 滚动更新相关的事件，如：
+        *   `NodeTargetRevisionChanged`: 当节点目标版本变更时触发。
+        *   `NodeCurrentRevisionChanged`: 当节点当前版本变更时触发。
+        *   `InstallerPodFailed`: 当安装器 Pod 失败时触发。
 *   **Operator Logs:**
     *   查看 `openshift-etcd-operator` 命名空间中 `etcd-operator-*` Pod 的日志。
     *   关注 `EtcdCertSignerController` 的日志输出，可以看到同步循环的执行情况、错误信息、Quorum 检查结果等。

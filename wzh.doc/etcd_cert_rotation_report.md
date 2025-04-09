@@ -2,7 +2,7 @@
 
 ## 1. 引言
 
-Etcd 作为 OpenShift 集群的关键组件，其通信安全至关重要。集群 Etcd Operator (CEO) 负责管理 Etcd 集群的生命周期，包括其 TLS 证书的生成和轮替。本报告旨在分析 OpenShift Etcd Operator 中证书轮替的实现逻辑、相关日志、监控指标以及运维人员需要关注的方面。
+Etcd 作为 OpenShift 集群的关键组件，其通信安全至关重要。集群 [Etcd Operator (CEO)](https://github.com/openshift/cluster-etcd-operator) 负责管理 Etcd 集群的生命周期，包括其 TLS 证书的生成和轮替。本报告旨在分析 OpenShift Etcd Operator 中证书轮替的实现逻辑、相关日志、监控指标以及运维人员需要关注的方面。
 
 ## 2. 核心组件
 
